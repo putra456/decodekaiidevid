@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>KaiiDevID Absolute Decoder PROMAX</title>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:#050505;color:#fff;font-family:'Courier New',Courier,monospace;min-height:100vh;overflow-x:hidden;}
+
+  /* Scrollbar */
+  ::-webkit-scrollbar{width:4px;height:4px;}
+  ::-webkit-scrollbar-track{background:#0a0a0a;}
+  ::-webkit-scrollbar-thumb{background:#333;border-radius:2px;}
+  ::-webkit-scrollbar-thumb:hover{background:#555;}
+
+  /* Animations */
+  @keyframes pulse-blob{0%,100%{transform:scale(1) translate(0,0);opacity:.5;}33%{transform:scale(1.15) translate(20px,-20px);opacity:.8;}66%{transform:scale(.9) translate(-15px,15px);opacity:.4;}}
+  @keyframes spin-cw{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+  @keyframes spin-ccw{from{transform:rotate(0deg);}to{transform:rotate(-360deg);}}
+  @keyframes pulse-glow{0%,100%{opacity:.6;transform:scale(1);}50%{opacity:1;transform:scale(1.1);}}
+  @keyframes fadeInUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes blink{0%,100%{opacity:1;}50%{opacity:0;}}
+  @keyframes scanline{0%{transform:translateY(-100%);}100%{transform:translateY(100vh);}}
+  @keyframes ping{0%{transform:scale(1);opacity:1;}75%,100%{transform:scale(2);opacity:0;}}
+  @keyframes shimmer{0%{background-position:-200% center;}100%{background-position:200% center;}}
+
+  .spin-cw{animation:spin-cw 2s linear infinite;}
+  .spin-ccw{animation:spin-ccw 1.5s linear infinite;}
+  .spin-cw-slow{animation:spin-cw 4s linear infinite;}
+  .pulse-glow{animation:pulse-glow 2s ease-in-out infinite;}
+  .fade-in-up{animation:fadeInUp .4s ease forwards;}
+  .blink{animation:blink 1s step-end infinite;}
+  .ping{animation:ping 1.5s cubic-bezier(0,0,.2,1) infinite;}
+
+  /* Background blobs */
+  .blob{position:fixed;border-radius:50%;filter:blur(80px);pointer-events:none;z-index:0;}
+  .blob-1{width:600px;height:600px;background:rgba(255,255,255,.02);top:10%;left:20%;animation:pulse-blob 8s ease-in-out infinite;}
+  .blob-2{width:400px;height:400px;background:rgba(200,200,200,.015);bottom:15%;right:15%;animation:pulse-blob 12s ease-in-out infinite reverse;}
+  .blob-3{width:300px;height:300px;background:rgba(255,255,255,.01);top:50%;left:60%;animation:pulse-blob 6s ease-in-out infinite 2s;}
+
+  /* Grid overlay */
+  .grid-overlay{position:fixed;inset:0;opacity:.03;pointer-events:none;z-index:0;
+    background-image:linear-gradient(rgba(255,255,255,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.5) 1px,transparent 1px);
+    background-size:40px 40px;}
+
+  /* Layout */
+  .app-wrapper{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;}
+  .main-content{flex:1;display:flex;overflow:hidden;}
+
+  /* Header */
+  .header{border-bottom:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.6);backdrop-filter:blur(20px);padding:10px 24px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:relative;z-index:10;}
+  .header-logo{width:32px;height:32px;border:1px solid rgba(255,255,255,.3);border-radius:6px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);position:relative;}
+  .header-dot{position:absolute;top:-4px;right:-4px;width:8px;height:8px;border-radius:50%;background:#fff;}
+  .header-dot-ping{position:absolute;top:-4px;right:-4px;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.5);}
+
+  /* Left Panel */
+  .left-panel{width:41.66%;border-right:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;overflow:hidden;position:relative;}
+  .left-scroll{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;position:relative;z-index:1;}
+
+  /* Video bg */
+  .video-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:grayscale(1);opacity:.04;pointer-events:none;z-index:0;}
+
+  /* Scanline */
+  .scanline{position:absolute;top:0;left:0;right:0;height:80px;background:linear-gradient(to bottom,transparent,rgba(255,255,255,.03),transparent);animation:scanline 6s linear infinite;pointer-events:none;z-index:2;}
+
+  /* Cards */
+  .card{border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(0,0,0,.4);backdrop-filter:blur(10px);padding:16px;}
+  .section-label{font-size:9px;letter-spacing:.4em;text-transform:uppercase;color:rgba(255,255,255,.3);display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+  .section-label::before{content:'';display:block;width:12px;height:1px;background:rgba(255,255,255,.2);}
+  .section-label::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.1);}
+
+  /* Mode buttons */
+  .mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .mode-btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:8px;border:1px solid;font-size:10px;letter-spacing:.2em;text-transform:uppercase;cursor:pointer;transition:all .3s;font-family:inherit;font-weight:bold;}
+  .mode-btn-active{background:#fff;color:#000;border-color:#fff;}
+  .mode-btn-inactive{background:transparent;color:rgba(255,255,255,.4);border-color:rgba(255,255,255,.2);}
+  .mode-btn-inactive:hover{border-color:rgba(255,255,255,.4);color:rgba(255,255,255,.7);}
+
+  .obf-label{font-size:9px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.25);margin-bottom:8px;margin-top:12px;}
+  .obf-hint{font-size:9px;color:rgba(255,255,255,.2);letter-spacing:.05em;margin-top:8px;}
+
+  /* Drop zone */
+  .drop-zone{border:2px dashed;border-radius:8px;min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:all .3s;}
+  .drop-idle{border-color:rgba(255,255,255,.15);}
+  .drop-idle:hover{border-color:rgba(255,255,255,.3);background:rgba(255,255,255,.02);}
+  .drop-dragging{border-color:rgba(255,255,255,.6);background:rgba(255,255,255,.1);}
+  .drop-ready{border-color:rgba(255,255,255,.3);background:rgba(255,255,255,.05);}
+  .drop-text-main{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.4);}
+  .drop-text-sub{font-size:9px;color:rgba(255,255,255,.2);margin-top:4px;letter-spacing:.05em;}
+  .clear-btn{width:100%;padding:6px;border:1px solid rgba(255,255,255,.1);border-radius:6px;background:transparent;color:rgba(255,255,255,.3);font-size:9px;letter-spacing:.25em;text-transform:uppercase;cursor:pointer;font-family:inherit;transition:all .2s;}
+  .clear-btn:hover{color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.2);}
+
+  /* Execute button */
+  .exec-btn{width:100%;padding:14px;border-radius:10px;border:1px solid;font-size:11px;letter-spacing:.35em;text-transform:uppercase;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .3s;font-family:inherit;}
+  .exec-active{background:#fff;color:#000;border-color:#fff;}
+  .exec-active:hover{background:#e5e5e5;}
+  .exec-active:active{transform:scale(.98);}
+  .exec-disabled{background:transparent;color:rgba(255,255,255,.2);border-color:rgba(255,255,255,.1);cursor:not-allowed;}
+  .info-row{margin-top:10px;display:flex;justify-content:space-between;font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.15);}
+
+  /* Right Panel */
+  .right-panel{flex:1;display:flex;flex-direction:column;background:rgba(0,0,0,.2);overflow:hidden;}
+  .console-header{border-bottom:1px solid rgba(255,255,255,.1);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,.3);backdrop-filter:blur(10px);flex-shrink:0;}
+  .console-dot{width:6px;height:6px;border-radius:50%;}
+  .console-body{flex:1;overflow-y:auto;padding:20px;}
+  .console-footer{border-top:1px solid rgba(255,255,255,.05);padding:8px 20px;display:flex;justify-content:space-between;background:rgba(0,0,0,.2);flex-shrink:0;}
+
+  /* Standby */
+  .standby-wrap{min-height:400px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;}
+  .spinner-outer{position:relative;width:96px;height:96px;display:flex;align-items:center;justify-content:center;}
+  .spinner-ring{position:absolute;inset:0;border-radius:50%;border:1px solid;}
+  .spinner-ring-mid{position:absolute;inset:8px;border-radius:50%;border:1px dashed;}
+  .spinner-ring-inner{position:absolute;inset:16px;border-radius:50%;border:1px solid;}
+
+  /* Result */
+  .result-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+  .export-btn{display:flex;align-items:center;gap:6px;padding:8px 16px;background:#fff;color:#000;border:none;border-radius:6px;font-size:9px;letter-spacing:.25em;text-transform:uppercase;font-weight:bold;cursor:pointer;font-family:inherit;transition:all .2s;flex-shrink:0;}
+  .export-btn:hover{background:#e5e5e5;}
+  .export-btn:active{transform:scale(.95);}
+  .badge{display:inline-block;padding:4px 10px;border:1px solid rgba(255,255,255,.2);border-radius:4px;font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.5);background:rgba(255,255,255,.03);margin:2px;}
+  .steps-box{border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(0,0,0,.4);padding:16px;margin-bottom:16px;}
+  .step-item{display:flex;gap:12px;align-items:flex-start;font-size:10px;color:rgba(255,255,255,.5);line-height:1.6;margin-bottom:6px;}
+  .step-num{color:rgba(255,255,255,.2);font-weight:bold;flex-shrink:0;}
+  .output-box{border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(0,0,0,.5);overflow:hidden;margin-bottom:16px;}
+  .output-header{padding:8px 16px;border-bottom:1px solid rgba(255,255,255,.05);display:flex;justify-content:space-between;align-items:center;}
+  .output-pre{padding:16px;font-size:10px;color:rgba(255,255,255,.6);line-height:1.6;overflow-x:auto;max-height:320px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;}
+  .conclusion-box{border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(0,0,0,.3);padding:16px;margin-bottom:16px;}
+  .export-full-btn{width:100%;padding:12px;border:1px solid rgba(255,255,255,.2);border-radius:10px;background:transparent;color:rgba(255,255,255,.5);font-size:10px;letter-spacing:.3em;text-transform:uppercase;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-family:inherit;transition:all .2s;}
+  .export-full-btn:hover{color:#fff;border-color:rgba(255,255,255,.5);background:rgba(255,255,255,.05);}
+  .export-full-btn:active{transform:scale(.99);}
+
+  /* Responsive */
+  @media(max-width:900px){
+    .left-panel{width:100%;border-right:none;border-bottom:1px solid rgba(255,255,255,.1);max-height:60vh;}
+    .main-content{flex-direction:column;}
+    .blob-1,.blob-2,.blob-3{display:none;}
+  }
+
+  /* Lucide icon helper */
+  .icon{display:inline-flex;align-items:center;justify-content:center;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── Lucide icon helper ──────────────────────────────────────────────────────
+function Icon({ name, size = 16, color = "currentColor", style = {} }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!ref.current || !window.lucide) return;
+    ref.current.innerHTML = "";
+    const iconFn = window.lucide[name];
+    if (!iconFn) return;
+    // lucide UMD exposes createIcons or individual icon functions
+    // We'll use the SVG string approach via lucide.createElement
+    try {
+      const svgData = iconFn([
+        "svg",
+        {
+          xmlns: "http://www.w3.org/2000/svg",
+          width: size,
+          height: size,
+          viewBox: "0 0 24 24",
+          fill: "none",
+          stroke: color,
+          "stroke-width": "2",
+          "stroke-linecap": "round",
+          "stroke-linejoin": "round",
+        },
+      ]);
+      // svgData is [tagName, attrs, ...children]
+      function buildEl(node) {
+        if (typeof node === "string") return document.createTextNode(node);
+        const [tag, attrs, ...children] = node;
+        const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+        if (attrs) Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+        children.forEach(c => el.appendChild(buildEl(c)));
+        return el;
+      }
+      ref.current.appendChild(buildEl(svgData));
+    } catch (e) {
+      ref.current.textContent = "";
+    }
+  }, [name, size, color]);
+  return <span ref={ref} className="icon" style={{ width: size, height: size, ...style }} />;
+}
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+const API_KEY = "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";
+const API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const MODEL   = "z-ai/glm-4.5-air:free";
+
+const LOADING_TEXTS = [
+  "INITIALIZING ENGINE...",
+  "CONNECTING TO NEURAL CORE...",
+  "EXTRACTING LAYERS...",
+  "RUNNING CHAIN OF THOUGHT...",
+  "DECRYPTING OBFUSCATION...",
+  "ANALYZING ENTROPY...",
+  "MAPPING CODE STRUCTURE...",
+  "RESOLVING DEPENDENCIES...",
+  "FINALIZING OUTPUT...",
+];
+
+// ─── System Prompts ───────────────────────────────────────────────────────────
+function getSystemPrompt(mode, level) {
+  if (mode === "DECODE") return `You are KaiiDevID Absolute Decoder — a supreme code analysis engine capable of reverse-engineering any obfuscated, encoded, or minified source code.
+
+Your mission: perform recursive multi-layer decoding using Chain of Thought methodology.
+
+CHAIN OF THOUGHT PROCESS:
+1. Identify all encoding/obfuscation layers present (Base64, Hex, ROT13, JSFuck, eval chains, Unicode escapes, XOR, etc.)
+2. Decode layer by layer, documenting each step
+3. Continue recursively until you reach clean, human-readable source code
+4. Verify the output makes logical sense as code
+
+CRITICAL: You MUST respond with ONLY a raw JSON object. NO markdown. NO backticks. NO explanation outside JSON.
+
+Respond EXACTLY in this format:
+{"thinking_steps":["step 1 description","step 2 description","step 3 description"],"success":true,"methods_involved":["Base64","Hex","etc"],"output_text":"the fully decoded clean source code here","conclusion":"brief explanation of what was decoded and how many layers were found"}`;
+
+  if (mode === "ENCODE" && level === "Strict") return `You are KaiiDevID Ultimate Obfuscator — a heavyweight code obfuscation engine specializing in maximum entropy obfuscation.
+
+Your mission: transform the provided source code into the most complex obfuscation possible using JSFuck-style encoding, heavy eval packing, string splitting, unicode escaping, and multi-layer wrapping.
+
+OBFUSCATION REQUIREMENTS:
+1. Apply JSFuck-style character encoding where possible
+2. Use eval() chains with nested function wrappers
+3. Convert strings to unicode/hex escape sequences
+4. Apply multiple encoding layers (minimum 3 layers)
+5. Use base conversion, bitwise operations, and string fromCharCode tricks
+6. The result must still be functionally executable code
+
+CRITICAL: You MUST respond with ONLY a raw JSON object. NO markdown. NO backticks. NO explanation outside JSON.
+
+Respond EXACTLY in this format:
+{"thinking_steps":["obfuscation step 1","obfuscation step 2","obfuscation step 3"],"success":true,"methods_involved":["JSFuck","eval-chain","unicode-escape","hex-encoding"],"output_text":"the heavily obfuscated code here","conclusion":"description of obfuscation layers applied"}`;
+
+  return `You are KaiiDevID Basic Encoder — a simple encoding utility that applies straightforward, easily reversible encoding.
+
+Your mission: encode the provided source code using basic Base64 and Hex encoding methods.
+
+ENCODING PROCESS:
+1. Convert code to Base64 representation
+2. Apply simple Hex encoding on top
+3. Wrap in a basic eval structure
+4. Keep it simple and readable
+
+CRITICAL: You MUST respond with ONLY a raw JSON object. NO markdown. NO backticks. NO explanation outside JSON.
+
+Respond EXACTLY in this format:
+{"thinking_steps":["encoding step 1","encoding step 2"],"success":true,"methods_involved":["Base64","Hex"],"output_text":"the encoded result here","conclusion":"basic encoding applied successfully"}`;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function parseAIResponse(text) {
+  try { return JSON.parse(text); } catch {}
+  try {
+    const m = text.match(/\{[\s\S]*\}/);
+    if (m) return JSON.parse(m[0]);
+  } catch {}
+  try {
+    const cleaned = text.replace(/```json/gi,"").replace(/```/g,"").trim();
+    return JSON.parse(cleaned);
+  } catch {}
+  return {
+    thinking_steps: ["Raw response received", "JSON parsing attempted"],
+    success: false,
+    methods_involved: ["Unknown"],
+    output_text: text,
+    conclusion: "Could not parse structured response. Raw output shown.",
+  };
+}
+
+async function callAPI(content, mode, level, attempt = 0) {
+  const systemPrompt = getSystemPrompt(mode, level);
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://kaiidevid.app",
+        "X-Title": "KaiiDevID Absolute Decoder PROMAX",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user",   content: `Process this code/content:\n\n${content.slice(0, 12000)}` },
+        ],
+        temperature: 0.1,
+        max_tokens: 8192,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`API ${res.status}: ${err.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    const raw = data?.choices?.[0]?.message?.content || "";
+    return parseAIResponse(raw);
+  } catch (err) {
+    if (attempt < 2) {
+      await sleep(Math.pow(2, attempt) * 1500);
+      return callAPI(content, mode, level, attempt + 1);
+    }
+    throw err;
+  }
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ─── Spinner Component ────────────────────────────────────────────────────────
+function ComplexSpinner() {
+  const TICKS = [0,45,90,135,180,225,270,315];
+  return (
+    <div style={{ position:"relative", width:112, height:112, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      {/* Outer ring */}
+      <div className="spinner-ring spin-cw-slow" style={{ border:"2px solid rgba(255,255,255,.1)" }} />
+      {/* Mid dashed ring */}
+      <div className="spinner-ring-mid spin-ccw" style={{ border:"2px dashed rgba(255,255,255,.2)", animationDuration:"2s" }} />
+      {/* Inner ring */}
+      <div className="spinner-ring-inner spin-cw" style={{ border:"1px solid rgba(255,255,255,.35)", animationDuration:"1s" }} />
+      {/* Tick dots */}
+      {TICKS.map(deg => {
+        const rad = deg * Math.PI / 180;
+        return (
+          <div key={deg} style={{
+            position:"absolute",
+            width:6, height:6,
+            borderRadius:"50%",
+            background:"rgba(255,255,255,.4)",
+            top:  `${50 - 44 * Math.cos(rad)}%`,
+            left: `${50 + 44 * Math.sin(rad)}%`,
+            transform:"translate(-50%,-50%)",
+          }} />
+        );
+      })}
+      {/* Center icon */}
+      <div className="pulse-glow" style={{ position:"relative", zIndex:10 }}>
+        <Icon name="Cpu" size={24} color="rgba(255,255,255,.85)" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
+function App() {
+  const [mode,         setMode]         = useState("DECODE");
+  const [obfLevel,     setObfLevel]     = useState("Rentan");
+  const [fileState,    setFileState]    = useState("idle");   // idle | reading | ready
+  const [fileInfo,     setFileInfo]     = useState(null);
+  const [fileContent,  setFileContent]  = useState("");
+  const [consoleState, setConsoleState] = useState("standby"); // standby|loading|error|result
+  const [result,       setResult]       = useState(null);
+  const [errorMsg,     setErrorMsg]     = useState("");
+  const [loadingIdx,   setLoadingIdx]   = useState(0);
+  const [isDragging,   setIsDragging]   = useState(false);
+  const [consoleDot,   setConsoleDot]   = useState("rgba(255,255,255,.2)");
+
+  const fileRef        = useRef();
+  const loadingInterval= useRef();
+
+  // Loading text cycler
+  useEffect(() => {
+    if (consoleState === "loading") {
+      let i = 0;
+      loadingInterval.current = setInterval(() => {
+        i = (i + 1) % LOADING_TEXTS.length;
+        setLoadingIdx(i);
+      }, 1800);
+    } else {
+      clearInterval(loadingInterval.current);
+    }
+    return () => clearInterval(loadingInterval.current);
+  }, [consoleState]);
+
+  // Console dot color
+  useEffect(() => {
+    if (consoleState === "loading") setConsoleDot("#fff");
+    else if (consoleState === "result") setConsoleDot("#fff");
+    else if (consoleState === "error") setConsoleDot("rgba(255,255,255,.5)");
+    else setConsoleDot("rgba(255,255,255,.2)");
+  }, [consoleState]);
+
+  // Read file
+  const readFile = useCallback((file) => {
+    if (!file) return;
+    setFileState("reading");
+    const reader = new FileReader();
+    reader.onload = e => {
+      setFileContent(e.target.result);
+      setFileInfo({ name: file.name, size: file.size });
+      setFileState("ready");
+      setConsoleState("standby");
+      setResult(null);
+    };
+    reader.onerror = () => setFileState("idle");
+    reader.readAsText(file);
+  }, []);
+
+  const handleDrop = useCallback(e => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) readFile(file);
+  }, [readFile]);
+
+  const handleFileChange = e => {
+    const file = e.target.files[0];
+    if (file) readFile(file);
+  };
+
+  const reset = () => {
+    setFileState("idle");
+    setFileInfo(null);
+    setFileContent("");
+    setConsoleState("standby");
+    setResult(null);
+    setErrorMsg("");
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const execute = async () => {
+    if (!fileContent || consoleState === "loading") return;
+    setConsoleState("loading");
+    setResult(null);
+    setErrorMsg("");
+    try {
+      const res = await callAPI(fileContent, mode, obfLevel);
+      setResult(res);
+      setConsoleState("result");
+    } catch (err) {
+      setErrorMsg(err.message || "Unknown error occurred");
+      setConsoleState("error");
+    }
+  };
+
+  const exportFile = () => {
+    if (!result?.output_text) return;
+    const prefix = mode === "DECODE" ? "decoded_" : "encoded_";
+    const filename = prefix + (fileInfo?.name || "output.txt");
+    const blob = new Blob([result.output_text], { type:"text/plain" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const dropZoneClass = isDragging ? "drop-zone drop-dragging"
+                      : fileState === "ready" ? "drop-zone drop-ready"
+                      : "drop-zone drop-idle";
+
+  const consoleStatusText = {
+    standby: "standby",
+    loading: "processing",
+    error:   "error",
+    result:  mode === "DECODE" ? "decoded" : "encoded",
+  }[consoleState] || "standby";
+
+  return (
+    <div className="app-wrapper">
+      {/* Background */}
+      <div className="blob blob-1" />
+      <div className="blob blob-2" />
+      <div className="blob blob-3" />
+      <div className="grid-overlay" />
+
+      {/* ── Header ── */}
+      <header className="header">
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <div className="header-logo">
+            <Icon name="Cpu" size={16} color="#fff" />
+            <div className="header-dot-ping ping" style={{ position:"absolute", top:-4, right:-4, width:8, height:8, borderRadius:"50%", background:"rgba(255,255,255,.5)" }} />
+            <div className="header-dot" />
+          </div>
+          <div>
+            <div style={{ fontSize:9, letterSpacing:".3em", textTransform:"uppercase", color:"rgba(255,255,255,.4)" }}>KaiiDevID Systems v3.0</div>
+            <div style={{ fontSize:11, letterSpacing:".2em", textTransform:"uppercase", fontWeight:"bold" }}>Absolute Decoder PROMAX</div>
+          </div>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:16 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:9, letterSpacing:".1em", textTransform:"uppercase", color:"rgba(255,255,255,.3)" }}>
+            <Icon name="Activity" size={12} color="rgba(255,255,255,.5)" />
+            sys.online
+          </div>
+          <div style={{ fontSize:8, letterSpacing:".1em", textTransform:"uppercase", color:"rgba(255,255,255,.15)" }}>
+            neural.core.active
+          </div>
+        </div>
+      </header>
+
+      {/* ── Main ── */}
+      <div className="main-content">
+
+        {/* ══════════════════ LEFT PANEL ══════════════════ */}
+        <div className="left-panel">
+          <video className="video-bg" autoPlay loop muted playsInline>
+            <source src="/video.mp4" type="video/mp4" />
+          </video>
+          <div className="scanline" />
+
+          <div className="left-scroll">
+
+            {/* Mode Switcher */}
+            <div className="card">
+              <div className="section-label">operation mode</div>
+              <div className="mode-grid">
+                <button className={`mode-btn ${mode==="DECODE" ? "mode-btn-active" : "mode-btn-inactive"}`} onClick={() => setMode("DECODE")}>
+                  <Icon name="Unlock" size={13} color={mode==="DECODE" ? "#000" : "rgba(255,255,255,.4)"} />
+                  Decode
+                </button>
+                <button className={`mode-btn ${mode==="ENCODE" ? "mode-btn-active" : "mode-btn-inactive"}`} onClick={() => setMode("ENCODE")}>
+                  <Icon name="Lock" size={13} color={mode==="ENCODE" ? "#000" : "rgba(255,255,255,.4)"} />
+                  Encode
+                </button>
+              </div>
+
+              {mode === "ENCODE" && (
+                <div className="fade-in-up">
+                  <div className="obf-label">obfuscation level</div>
+                  <div className="mode-grid">
+                    <button className={`mode-btn ${obfLevel==="Rentan" ? "mode-btn-active" : "mode-btn-inactive"}`} style={{ fontSize:9 }} onClick={() => setObfLevel("Rentan")}>
+                      Rentan
+                    </button>
+                    <button className={`mode-btn ${obfLevel==="Strict" ? "mode-btn-active" : "mode-btn-inactive"}`} style={{ fontSize:9 }} onClick={() => setObfLevel("Strict")}>
+                      <Icon name="Zap" size={11} color={obfLevel==="Strict" ? "#000" : "rgba(255,255,255,.4)"} />
+                      Strict
+                    </button>
+                  </div>
+                  <div className="obf-hint">
+                    {obfLevel === "Strict"
+                      ? "JSFuck / Heavy Multi-Layer Packing"
+                      : "Basic Base64 / Hex — easily reversible"}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* File Upload */}
+            <div className="card">
+              <div className="section-label">input source</div>
+
+              <div
+                className={dropZoneClass}
+                onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                onClick={() => fileRef.current?.click()}
+              >
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".txt,.js,.ts,.jsx,.tsx,.py,.html,.css,.json,.xml,.php,.rb,.java,.c,.cpp,.go,.rs,.sh,.md"
+                  style={{ display:"none" }}
+                  onChange={handleFileChange}
+                />
+
+                {fileState === "idle" && (
+                  <div className="fade-in-up" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10, padding:"16px 0" }}>
+                    <Icon name="Upload" size={28} color="rgba(255,255,255,.25)" />
+                    <div style={{ textAlign:"center" }}>
+                      <div className="drop-text-main">Drop File Here</div>
+                      <div className="drop-text-sub">or click to browse</div>
+                    </div>
+                  </div>
+                )}
+
+                {fileState === "reading" && (
+                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:12, padding:"16px 0" }}>
+                    <div style={{ position:"relative", width:32, height:32 }}>
+                      <div style={{ position:"absolute", inset:0, borderRadius:"50%", border:"1px solid rgba(255,255,255,.2)" }} className="spin-cw" />
+                      <div style={{ position:"absolute", inset:4, borderRadius:"50%", border:"1px solid rgba(255,255,255,.1)" }} className="spin-ccw" />
+                    </div>
+                    <div style={{ fontSize:9, letterSpacing:".3em", textTransform:"uppercase", color:"rgba(255,255,255,.3)" }}>reading...</div>
+                  </div>
+                )}
+
+                {fileState === "ready" && fileInfo && (
+                  <div className="fade-in-up" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, padding:"16px 8px" }}>
+                    <Icon name="Database" size={24} color="rgba(255,255,255,.7)" />
+                    <div style={{ textAlign:"center" }}>
+                      <div style={{ fontSize:10, color:"rgba(255,255,255,.8)", wordBreak:"break-all", maxWidth:180 }}>{fileInfo.name}</div>
+                      <div style={{ fontSize:9, color:"rgba(255,255,255,.3)", marginTop:4, letterSpacing:".15em" }}>{formatSize(fileInfo.size)}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {fileState === "ready" && (
+                <button className="clear-btn" style={{ marginTop:8 }} onClick={e => { e.stopPropagation(); reset(); }}>
+                  clear file
+                </button>
+              )}
+            </div>
+
+            {/* Execute */}
+            <div style={{ marginTop:"auto" }}>
+              <button
+                className={`exec-btn ${fileState==="ready" && consoleState!=="loading" ? "exec-active" : "exec-disabled"}`}
+                onClick={execute}
+                disabled={fileState !== "ready" || consoleState === "loading"}
+              >
+                {consoleState === "loading" ? (
+                  <>
+                    <div style={{ width:16, height:16, border:"2px solid rgba(0,0,0,.3)", borderTopColor:"#000", borderRadius:"50%" }} className="spin-cw" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Icon name="Zap" size={14} color={fileState==="ready" ? "#000" : "rgba(255,255,255,.2)"} />
+                    Execute {mode}
+                    <Icon name="ChevronRight" size={14} color={fileState==="ready" ? "#000" : "rgba(255,255,255,.2)"} />
+                  </>
+                )}
+              </button>
+              <div className="info-row">
+                <span>model: glm-4.5-air</span>
+                <span>retry: 3x exp-backoff</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* ══════════════════ RIGHT PANEL ══════════════════ */}
+        <div className="right-panel">
+
+          {/* Console header */}
+          <div className="console-header">
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <Icon name="Terminal" size={13} color="rgba(255,255,255,.4)" />
+              <span style={{ fontSize:9, letterSpacing:".4em", textTransform:"uppercase", color:"rgba(255,255,255,.3)" }}>system console</span>
+              <div className="console-dot" style={{ background: consoleDot, ...(consoleState==="loading" ? { animation:"pulse-glow 1s ease-in-out infinite" } : {}) }} />
+            </div>
+            <div style={{ fontSize:9, letterSpacing:".2em", textTransform:"uppercase", color:"rgba(255,255,255,.15)" }}>
+              {consoleStatusText}<span className="blink" style={{ marginLeft:2 }}>_</span>
+            </div>
+          </div>
+
+          {/* Console body */}
+          <div className="console-body">
+
+            {/* STANDBY */}
+            {consoleState === "standby" && (
+              <div className="standby-wrap fade-in-up">
+                <div className="spinner-outer">
+                  <div className="spinner-ring spin-cw-slow" style={{ border:"1px solid rgba(255,255,255,.05)" }} />
+                  <div className="spinner-ring-mid" style={{ border:"1px solid rgba(255,255,255,.08)", animationDuration:"6s" }} className="spin-ccw" />
+                  <div className="pulse-glow" style={{ position:"relative", zIndex:10 }}>
+                    <Icon name="ShieldAlert" size={40} color="rgba(255,255,255,.2)" />
+                  </div>
+                </div>
+                <div style={{ textAlign:"center" }}>
+                  <div style={{ fontSize:11, letterSpacing:".5em", textTransform:"uppercase", color:"rgba(255,255,255,.2)" }}>System Standby</div>
+                  <div style={{ fontSize:9, letterSpacing:".3em", textTransform:"uppercase", color:"rgba(255,255,255,.1)", marginTop:8 }}>upload a file and execute to begin</div>
+                </div>
+                <div style={{ display:"flex", gap:10, marginTop:16 }}>
+                  {["●","○","○"].map((d,i) => <span key={i} style={{ color:"rgba(255,255,255,.2)", fontSize:12 }}>{d}</span>)}
+                </div>
+              </div>
+            )}
+
+            {/* LOADING */}
+            {consoleState === "loading" && (
+              <div className="standby-wrap fade-in-up">
+                <ComplexSpinner />
+                <div style={{ textAlign:"center" }}>
+                  <div style={{ fontSize:11, letterSpacing:".4em", textTransform:"uppercase", color:"rgba(255,255,255,.7)", minHeight:20 }}>
+                    {LOADING_TEXTS[loadingIdx]}
+                  </div>
+                  {/* Progress dots */}
+                  <div style={{ display:"flex", gap:4, justifyContent:"center", marginTop:12 }}>
+                    {LOADING_TEXTS.map((_,i) => (
+                      <div key={i} style={{
+                        height:2, borderRadius:2,
+                        background: i === loadingIdx ? "#fff" : "rgba(255,255,255,.15)",
+                        width: i === loadingIdx ? 24 : 6,
+                        transition:"all .3s",
+                      }} />
+                    ))}
+                  </div>
+                  <div style={{ fontSize:9, letterSpacing:".2em", textTransform:"uppercase", color:"rgba(255,255,255,.2)", marginTop:12 }}>
+                    exponential backoff enabled · model: glm-4.5-air
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ERROR */}
+            {consoleState === "error" && (
+              <div className="standby-wrap fade-in-up">
+                <div style={{ position:"relative" }}>
+                  <Icon name="XCircle" size={48} color="rgba(255,255,255,.5)" />
+                  <div style={{
+                    position:"absolute", inset:-4, borderRadius:"50%",
+                    border:"1px solid rgba(255,255,255,.2)",
+                  }} className="ping" />
+                </div>
+                <div style={{ textAlign:"center", maxWidth:380 }}>
+                  <div style={{ fontSize:11, letterSpacing:".35em", textTransform:"uppercase", color:"rgba(255,255,255,.6)", marginBottom:12 }}>Execution Failed</div>
+                  <div style={{
+                    fontSize:10, color:"rgba(255,255,255,.3)", wordBreak:"break-all", lineHeight:1.7,
+                    border:"1px solid rgba(255,255,255,.1)", borderRadius:8, padding:12,
+                    background:"rgba(255,255,255,.03)",
+                  }}>
+                    {errorMsg}
+                  </div>
+                </div>
+                <button onClick={execute} style={{
+                  display:"flex", alignItems:"center", gap:8,
+                  padding:"10px 24px",
+                  border:"1px solid rgba(255,255,255,.3)", borderRadius:8,
+                  background:"transparent", color:"rgba(255,255,255,.6)",
+                  fontSize:10, letterSpacing:".3em", textTransform:"uppercase",
+                  cursor:"pointer", fontFamily:"inherit",
+                  transition:"all .2s",
+                }}
+                  onMouseEnter={e => { e.target.style.color="#fff"; e.target.style.borderColor="rgba(255,255,255,.6)"; }}
+                  onMouseLeave={e => { e.target.style.color="rgba(255,255,255,.6)"; e.target.style.borderColor="rgba(255,255,255,.3)"; }}
+                >
+                  <Icon name="RefreshCw" size={12} color="rgba(255,255,255,.6)" />
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {/* RESULT */}
+            {consoleState === "result" && result && (
+              <div className="fade-in-up">
+
+                {/* Result header */}
+                <div className="result-header">
+                  <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
+                    <Icon name="CheckCircle2" size={16} color="rgba(255,255,255,.7)" style={{ marginTop:2, flexShrink:0 }} />
+                    <div>
+                      <div style={{ fontSize:10, letterSpacing:".3em", textTransform:"uppercase", color:"rgba(255,255,255,.7)" }}>
+                        {result.success ? "Execution Successful" : "Partial Result"}
+                      </div>
+                      <div style={{ fontSize:9, color:"rgba(255,255,255,.3)", marginTop:4, letterSpacing:".05em" }}>
+                        {mode === "DECODE" ? "Source decoded" : `Encoded — ${obfLevel}`}
+                      </div>
+                    </div>
+                  </div>
+                  <button className="export-btn" onClick={exportFile}>
+                    <Icon name="Download" size={11} color="#000" />
+                    Export File
+                  </button>
+                </div>
+
+                {/* Method badges */}
+                {result.methods_involved?.length > 0 && (
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:16 }}>
+                    {result.methods_involved.map((m, i) => (
+                      <span key={i} className="badge">{m}</span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Thinking Steps */}
+                {result.thinking_steps?.length > 0 && (
+                  <div className="steps-box">
+                    <div style={{ fontSize:9, letterSpacing:".4em", textTransform:"uppercase", color:"rgba(255,255,255,.25)", display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                      <Icon name="Activity" size={10} color="rgba(255,255,255,.25)" />
+                      Engine Execution Steps
+                    </div>
+                    {result.thinking_steps.map((step, i) => (
+                      <div key={i} className="step-item">
+                        <span className="step-num">{String(i+1).padStart(2,"0")}</span>
+                        <span style={{ flex:1 }}>{step}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Output */}
+                <div className="output-box">
+                  <div className="output-header">
+                    <span style={{ fontSize:9, letterSpacing:".4em", textTransform:"uppercase", color:"rgba(255,255,255,.25)" }}>
+                      {mode === "DECODE" ? "decoded output" : "encoded output"}
+                    </span>
+                    <span style={{ fontSize:9, color:"rgba(255,255,255,.15)" }}>
+                      {result.output_text?.length?.toLocaleString()} chars
+                    </span>
+                  </div>
+                  <pre className="output-pre">{result.output_text}</pre>
+                </div>
+
+                {/* Conclusion */}
+                {result.conclusion && (
+                  <div className="conclusion-box">
+                    <div style={{ fontSize:9, letterSpacing:".4em", textTransform:"uppercase", color:"rgba(255,255,255,.25)", display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                      <Icon name="AlertTriangle" size={10} color="rgba(255,255,255,.25)" />
+                      Conclusion
+                    </div>
+                    <div style={{ fontSize:10, color:"rgba(255,255,255,.45)", lineHeight:1.7 }}>
+                      {result.conclusion}
+                    </div>
+                  </div>
+                )}
+
+                {/* Bottom export */}
+                <button className="export-full-btn" onClick={exportFile}>
+                  <Icon name="Download" size={13} color="rgba(255,255,255,.5)" />
+                  Export as {(mode==="DECODE" ? "decoded_" : "encoded_") + (fileInfo?.name || "output.txt")}
+                </button>
+
+              </div>
+            )}
+
+          </div>
+
+          {/* Console footer */}
+          <div className="console-footer">
+            <span style={{ fontSize:8, letterSpacing:".2em", textTransform:"uppercase", color:"rgba(255,255,255,.1)" }}>© kaiidevid · absolute decoder promax</span>
+            <span style={{ fontSize:8, letterSpacing:".15em", textTransform:"uppercase", color:"rgba(255,255,255,.1)" }}>openrouter · {MODEL}</span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
